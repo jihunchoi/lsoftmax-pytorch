@@ -49,7 +49,7 @@ def train(args):
         raise ValueError('Unknown optimizer')
 
     lr_scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer=optimizer, factor=0.1, patience=5, verbose=True,
+        optimizer=optimizer, mode='max', factor=0.1, patience=5, verbose=True,
         min_lr=min_lr)
 
     summary_writer = SummaryWriter(os.path.join(args.save_dir, 'log'))
@@ -79,19 +79,24 @@ def train(args):
 
     def validate():
         model.eval()
-        loss_sum = loss_denom = 0
+        loss_sum = num_correct = denom = 0
         for valid_batch in valid_loader:
             valid_x, valid_y = (var(valid_batch[0], volatile=True),
                                 var(valid_batch[1], volatile=True))
             logit = model(valid_x)
+            y_pred = logit.max(1)[1]
             loss = criterion(input=logit, target=valid_y)
             loss_sum += loss.data[0] * valid_x.size(0)
-            loss_denom += valid_x.size(0)
-        loss = loss_sum / loss_denom
+            num_correct += y_pred.eq(valid_y).long().sum().data[0]
+            denom += valid_x.size(0)
+        loss = loss_sum / denom
+        accuracy = num_correct / denom
         summary_writer.add_scalar(tag='valid_loss', scalar_value=loss,
                                   global_step=global_step)
-        lr_scheduler.step(loss)
-        return loss
+        summary_writer.add_scalar(tag='valid_accuracy', scalar_value=accuracy,
+                                  global_step=global_step)
+        lr_scheduler.step(accuracy)
+        return loss, accuracy
 
     def test():
         model.eval()
@@ -108,21 +113,23 @@ def train(args):
                                   global_step=global_step)
         return accuracy
 
-    best_valid_loss = 1e10
+    best_valid_accuracy = 0
     for epoch in range(1, args.max_epoch + 1):
         train_epoch()
-        valid_loss = validate()
+        valid_loss, valid_accuracy = validate()
         print(f'Epoch {epoch}: Valid loss = {valid_loss:.5f}')
+        print(f'Epoch {epoch}: Valid accuracy = {valid_accuracy:.5f}')
         test_accuracy = test()
         print(f'Epoch {epoch}: Test accuracy = {test_accuracy:.5f}')
-        if valid_loss < best_valid_loss:
+        if valid_accuracy > best_valid_accuracy:
             model_filename = (f'{epoch:02d}'
                               f'-{valid_loss:.5f}'
+                              f'-{valid_accuracy:.5f}'
                               f'-{test_accuracy:.5f}.pt')
             model_path = os.path.join(args.save_dir, model_filename)
             torch.save(model.state_dict(), model_path)
             print(f'Epoch {epoch}: Saved the new best model to: {model_path}')
-            best_valid_loss = valid_loss
+            best_valid_accuracy = valid_accuracy
 
 
 def main():
