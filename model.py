@@ -13,6 +13,7 @@ class MNISTModel(nn.Module):
         self.margin = margin
 
         cnn_layers = OrderedDict()
+        cnn_layers['pre_bn'] = nn.BatchNorm2d(1)
         cnn_layers['conv0_0'] = nn.Conv2d(in_channels=1, out_channels=64,
                                           kernel_size=(3, 3), padding=1)
         cnn_layers['prelu0_0'] = nn.PReLU(64)
