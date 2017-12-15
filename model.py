@@ -3,11 +3,14 @@ from collections import OrderedDict
 from torch import nn
 from torch.nn import init
 
+from lsoftmax import LSoftmaxLinear
+
 
 class MNISTModel(nn.Module):
 
-    def __init__(self):
+    def __init__(self, margin):
         super().__init__()
+        self.margin = margin
 
         cnn_layers = OrderedDict()
         cnn_layers['conv0_0'] = nn.Conv2d(in_channels=1, out_channels=64,
@@ -41,8 +44,12 @@ class MNISTModel(nn.Module):
         self.net = nn.Sequential(cnn_layers)
         self.fc = nn.Sequential(OrderedDict([
             ('fc0', nn.Linear(in_features=576, out_features=256)),
-            ('fc1', nn.Linear(in_features=256, out_features=10))
+            # ('fc1', nn.Linear(in_features=256, out_features=10))
+            ('fc0_bn', nn.BatchNorm1d(256))
         ]))
+
+        self.lsoftmax_linear = LSoftmaxLinear(
+            input_dim=256, output_dim=10, margin=margin)
         self.reset_parameters()
 
     def reset_parameters(self):
@@ -58,12 +65,14 @@ class MNISTModel(nn.Module):
         for x in range(4):
             init_kaiming(getattr(self.net, f'conv3_{x}'))
         init_kaiming(self.fc.fc0)
-        init_kaiming(self.fc.fc1)
+        self.lsoftmax_linear.reset_parameters()
+        # init_kaiming(self.fc.fc1)
 
-    def forward(self, input):
+    def forward(self, input, target=None):
         """
         Args:
             input: A variable of size (N, 1, 28, 28).
+            target: A long variable of size (N,).
 
         Returns:
             logit: A variable of size (N, 10).
@@ -72,5 +81,6 @@ class MNISTModel(nn.Module):
         conv_output = self.net(input)
         batch_size = conv_output.size(0)
         fc_input = conv_output.view(batch_size, -1)
-        logit = self.fc(fc_input)
+        fc_output = self.fc(fc_input)
+        logit = self.lsoftmax_linear(input=fc_output, target=target)
         return logit

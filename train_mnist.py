@@ -29,14 +29,10 @@ def train(args):
         sampler=sampler.SubsetRandomSampler(list(range(55000, 60000))))
     test_loader = DataLoader(dataset=test_dataset, batch_size=256)
 
-    model = MNISTModel()
+    model = MNISTModel(margin=args.margin)
     if args.gpu > -1:
         model.cuda(args.gpu)
-
-    if args.loss_type == 'softmax':
-        criterion = nn.CrossEntropyLoss()
-    else:
-        raise ValueError('Unknown loss type')
+    criterion = nn.CrossEntropyLoss()
 
     if args.optimizer == 'sgd':
         optimizer = optim.SGD(params=model.parameters(), lr=0.1, momentum=0.9,
@@ -66,7 +62,7 @@ def train(args):
         model.train()
         for train_batch in train_loader:
             train_x, train_y = var(train_batch[0]), var(train_batch[1])
-            logit = model(train_x)
+            logit = model(input=train_x, target=train_y)
             loss = criterion(input=logit, target=train_y)
             optimizer.zero_grad()
             loss.backward()
@@ -134,7 +130,7 @@ def train(args):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--loss-type', required=True)
+    parser.add_argument('--margin', default=1, type=int)
     parser.add_argument('--optimizer', default='sgd')
     parser.add_argument('--max-epoch', default=50, type=int)
     parser.add_argument('--gpu', default=0, type=int)
